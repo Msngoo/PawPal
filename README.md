@@ -1,4 +1,4 @@
-# EG-UY 1004
+# EG-UY 1004, Spring 2025
 ## SLDP RAD 08: Code
 ## Languages: C++ (Arduino IDE) & Python (Raspberry Pi)
 
