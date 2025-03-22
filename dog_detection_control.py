@@ -1,6 +1,6 @@
 
 #!/usr/bin/env python3
-import cv2
+import cv2 as cv
 import numpy as np
 import serial
 import time
@@ -14,12 +14,12 @@ time.sleep(2)  # Allow time for the Arduino to reset
 # ----- YOLO Model Setup for Dog Recognition -----
 # For a pretrained model, you can use one of the official YOLOv8 files (for example, "yolov8n.pt").
 # Alternatively, use your custom model file such as "best.pt". Ensure the model is in the working directory.
-model = YOLO("yolov8n.pt")
+model = YOLO("best.pt")
 # The ultralytics model will provide a names dictionary (model.names) with class labels.
 # COCO-trained YOLOv8 models include "dog" as one of the labels.
 
 # ----- USB Camera Setup -----
-cap = cv2.VideoCapture(0)  # Access the USB camera
+cap = cv.VideoCapture(0)  # Access the USB camera
 if not cap.isOpened():
     print("Error: Could not open USB camera.")
     exit()
@@ -47,7 +47,7 @@ while True:
         for box, conf, cls in zip(result.boxes.xyxy, result.boxes.conf, result.boxes.cls):
             if conf.item() >= 0.7:
                 x1, y1, x2, y2 = map(int, box[:4])
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 center_x = (x1 + x2) // 2
                 label = model.names[int(cls.item())]
                 if label.lower() == "dog":
@@ -86,11 +86,11 @@ while True:
         time.sleep(0.1)  # Brief delay to avoid flooding with commands
 
     # Display the current frame (for debugging and visual confirmation)
-    cv2.imshow("Frame", frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    cv.imshow("Frame", frame)
+    if cv.waitKey(1) & 0xFF == ord('q'):
         break
 
 # Cleanup before exit.
 cap.release()
-cv2.destroyAllWindows()
+cv.destroyAllWindows()
 arduino.close()
