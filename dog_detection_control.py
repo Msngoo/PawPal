@@ -24,8 +24,8 @@ import cv2 as cv
 camera = cv.VideoCapture(0)
 width = 640
 height = 480
-camera.set (cv.camera_PROP_FRAME_WIDTH, width) 
-camera.set(cv.camera_PROP_FRAME_HEIGHT, height)
+camera.set (cv.CAP_PROP_FRAME_WIDTH, width) 
+camera.set(cv.CAP_PROP_FRAME_HEIGHT, height)
 
 while True:
     result, frame = camera.read()  # Read frame from the camera
