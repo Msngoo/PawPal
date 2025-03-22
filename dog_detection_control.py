@@ -19,16 +19,32 @@ model = YOLO("best.pt")
 # COCO-trained YOLOv8 models include "dog" as one of the labels.
 
 # ----- USB Camera Setup -----
-cap = cv.VideoCapture(0)  # Access the USB camera
-if not cap.isOpened():
-    print("Error: Could not open USB camera.")
-    exit()
+import cv2 as cv
+
+camera = cv.Videocamerature(0)
+width = 640
+height = 480
+camera.set (cv.camera_PROP_FRAME_WIDTH, width) 
+camera.set(cv.camera_PROP_FRAME_HEIGHT, height)
+
+while True:
+    result, frame = camera.read()  # Read frame from the camera
+    if not result:
+        break
+    
+    cv.imshow("USB Camera Test", frame)
+
+    if cv.waitKey(1) & 0xFF == ord("q"):
+        break
+
+camera.release()
+cv.destroyAllWindows()
 
 searching = False
 last_command = None  # Store the last sent command to avoid redundant commands
 
 while True:
-    ret, frame = cap.read()
+    ret, frame = camera.read()
     if not ret:
         print("Failed to grab frame")
         break
@@ -91,6 +107,6 @@ while True:
         break
 
 # Cleanup before exit.
-cap.release()
+camera.release()
 cv.destroyAllWindows()
 arduino.close()
