@@ -1,10 +1,10 @@
 import cv2 as cv
 
-camera = cv2.VideoCapture(0)
+camera = cv.VideoCapture(0)
 width = 640
 height = 480
-camera.set (cv2.CAP_PROP_FRAME_WIDTH, width) 
-camera.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+camera.set (cv.CAP_PROP_FRAME_WIDTH, width) 
+camera.set(cv.CAP_PROP_FRAME_HEIGHT, height)
 
 while True:
     ret, frame = camera.read()  # Read frame from the camera
@@ -14,7 +14,7 @@ while True:
     cv2.imshow("USB Camera Test", frame)
 
 camera.release()
-cv2.destroyAllWindows()
+cv.destroyAllWindows()
 
 
 #Version2
