@@ -1,5 +1,3 @@
-#------------------------------------------------------------------------------------------------
-#SECTION 1: Importing Libraries and Setting Up Pins
 import cv2
 import numpy as np
 
