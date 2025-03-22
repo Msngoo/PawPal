@@ -7,11 +7,14 @@ camera.set (cv.CAP_PROP_FRAME_WIDTH, width)
 camera.set(cv.CAP_PROP_FRAME_HEIGHT, height)
 
 while True:
-    ret, frame = camera.read()  # Read frame from the camera
-    if not ret:
+    result, frame = camera.read()  # Read frame from the camera
+    if not result:
         break
     
-    cv2.imshow("USB Camera Test", frame)
+    cv.imshow("USB Camera Test", frame)
+
+    if cv.waitKey(1) & 0xFF == ord("q"):
+        break
 
 camera.release()
 cv.destroyAllWindows()
