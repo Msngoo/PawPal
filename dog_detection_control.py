@@ -21,7 +21,7 @@ model = YOLO("best.pt")
 # ----- USB Camera Setup -----
 import cv2 as cv
 
-camera = cv.Videocamerature(0)
+camera = cv.VideoCapture(0)
 width = 640
 height = 480
 camera.set (cv.camera_PROP_FRAME_WIDTH, width) 
