@@ -1,3 +1,4 @@
+// Arduino Code:
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <MPU6050.h>
@@ -8,6 +9,12 @@ MPU6050 mpu;
 
 #define TRIG_PIN 11
 #define ECHO_PIN 10
+
+// --- Added microphone pin definitions ---
+#define MIC_BCLK 9      // Bit Clock for the microphone
+#define MIC_DOUT 8      // Data Output for the microphone
+#define MIC_LRCL 7      // Left/Right Clock for the microphone
+// SEL is not connected (or left as per breakout configuration)
 
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *leftMotor = AFMS.getMotor(1);
@@ -25,6 +32,11 @@ void setup() {
   lcd.backlight();
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
+  
+  // --- Initialize microphone pins ---
+  pinMode(MIC_BCLK, INPUT);
+  pinMode(MIC_DOUT, INPUT);
+  pinMode(MIC_LRCL, INPUT);
   
   Wire.begin();
   mpu.initialize();
@@ -119,11 +131,14 @@ void stopMotors() {
   rightMotor->run(RELEASE);
 }
 
-// New function to handle bark detection
+// New function to handle bark detection, updated to show microphone pin data
 void barkDetected() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("BARK DETECTED");
+  lcd.setCursor(0, 1);
+  // Displaying microphone pin configuration on the LCD (BCLK=9, DOUT=8, LRCL=7)
+  lcd.print("Mic: BCLK=9 DOUT=8");
   delay(1000); // Display message for 1 second
   lcd.clear();
   lcd.setCursor(0, 0);
