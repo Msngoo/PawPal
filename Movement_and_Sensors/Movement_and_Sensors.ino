@@ -62,6 +62,8 @@ void loop() {
       rotate360();
     } else if (command == "STOP") {
       stopMotors();
+    } else if (command == "BARK") {  // New branch for bark detection
+      barkDetected();
     }
   }
   
@@ -115,4 +117,15 @@ void moveBackward() {
 void stopMotors() {
   leftMotor->run(RELEASE);
   rightMotor->run(RELEASE);
+}
+
+// New function to handle bark detection
+void barkDetected() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("BARK DETECTED");
+  delay(1000); // Display message for 1 second
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Distance & Angle");
 }
