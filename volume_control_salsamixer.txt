@@ -1,0 +1,19 @@
+# Reference to your I2S hardware; adjust the card name if necessary
+pcm.dmic_hw {
+    type hw
+    card sndrpii2scard
+    channels 2
+    format S32_LE
+}
+
+# Software volume control wrapper for the I2S mic
+pcm.dmic_sv {
+    type softvol
+    slave.pcm dmic_hw
+    control {
+        name "Boost Capture Volume"
+        card sndrpii2scard
+    }
+    min_dB -3.0
+    max_dB 30.0
+}
