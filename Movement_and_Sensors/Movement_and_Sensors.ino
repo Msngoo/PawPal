@@ -20,11 +20,13 @@ Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *leftMotor = AFMS.getMotor(1);
 Adafruit_DCMotor *rightMotor = AFMS.getMotor(4);
 
-// Updated motor speeds and rotation delay
-const int FORWARD_SPEED = 200;  // Increased from 150
-const int BACKWARD_SPEED = 200; // Increased from 150
-const int ROTATION_SPEED = 160; // Increased from 100
-const int ROTATION_DELAY = 2500; // Increased from 2000ms
+void moveForward(int speed);
+void moveForwardSlow();
+void stopMotors();
+void turnLeft();
+void turnRight();
+void turnInPlace();
+void turnSlow();
 
 void setup() {
   Serial.begin(9600);
@@ -32,11 +34,6 @@ void setup() {
   lcd.backlight();
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
-  
-  // --- Initialize microphone pins ---
-  pinMode(MIC_BCLK, INPUT);
-  pinMode(MIC_DOUT, INPUT);
-  pinMode(MIC_LRCL, INPUT);
   
   Wire.begin();
   mpu.initialize();
@@ -57,90 +54,83 @@ void setup() {
 }
 
 void loop() {
-  float distance = measureDistance();
-  
-  lcd.setCursor(0, 0);
-  lcd.print("Dist: ");
-  lcd.print(distance);
-  lcd.print(" cm   ");
-  
-  if (Serial.available()) {
-    String command = Serial.readStringUntil('\n');
-    command.trim();
-    
-    if (command == "FOLLOW") {
-      followDog(distance);
-    } else if (command == "ROTATE") {
-      rotate360();
-    } else if (command == "STOP") {
-      stopMotors();
-    } else if (command == "BARK") {  // New branch for bark detection
-      barkDetected();
-    }
-  }
-  
-  delay(100);
-}
+  long duration;
+  float distance;
+  int16_t ax, ay, az;
+  float angleX;
 
-float measureDistance() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
-  
-  long duration = pulseIn(ECHO_PIN, HIGH);
-  return (duration * 0.034) / 2;
-}
 
-void followDog(float distance) {
-  if (distance > 20) {
-    moveForward();
-  } else if (distance < 20) {
-    moveBackward();
+  duration = pulseIn(ECHO_PIN, HIGH);
+  distance = (duration * 0.034) / 2;
+
+  mpu.getAcceleration(&ax, &ay, &az);
+  angleX = atan2(ay, sqrt(ax * ax + az * az)) * 180 / PI;
+
+  lcd.setCursor(0, 0);
+  lcd.print("Dist: ");
+  lcd.print(distance);
+  lcd.print(" cm   ");
+
+  lcd.setCursor(0, 1);
+  lcd.print("Angle: ");
+  lcd.print(angleX);
+  lcd.print("   ");
+
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    if (command == "FORWARD") {
+      moveForward(150);
+    } else if (command == "LEFT") {
+      turnLeft();
+    } else if (command == "RIGHT") {
+      turnRight();
+    } else if (command == "TURN") {
+      turnInPlace();
+    } else if (command == "SLOW_TURN") {
+      turnSlow();
+    } else if (command == "STOP") {
+      stopMotors();
+    } else if (command == "BARK") {  // New branch for bark detection
+      barkDetected();
+    }
+    Serial.print("CMD: ");
+    Serial.println(command);
   } else {
-    stopMotors();
+    if (distance > 20 && distance <= 50) {
+      moveForward(150);  // High torque
+    } else if (distance > 5 && distance <= 20) {
+      moveForward(100);  // Medium speed to maintain 20cm
+    } else if (distance <= 5) {
+      moveForwardSlow();
+    } else {
+      stopMotors();
+    }
   }
+
+  delay(100);
 }
 
-void rotate360() {
-  leftMotor->setSpeed(ROTATION_SPEED);
-  rightMotor->setSpeed(ROTATION_SPEED);
-  leftMotor->run(FORWARD);
-  rightMotor->run(BACKWARD);
-  delay(ROTATION_DELAY);  // Adjusted for more granular control
-  stopMotors();
-}
-
-void moveForward() {
-  leftMotor->setSpeed(FORWARD_SPEED);
-  rightMotor->setSpeed(FORWARD_SPEED);
+void moveForward(int speed) {
+  leftMotor->setSpeed(speed);
+  rightMotor->setSpeed(speed);
   leftMotor->run(BACKWARD);
   rightMotor->run(BACKWARD);
 }
 
-void moveBackward() {
-  leftMotor->setSpeed(BACKWARD_SPEED);
-  rightMotor->setSpeed(BACKWARD_SPEED);
-  leftMotor->run(FORWARD);
-  rightMotor->run(FORWARD);
+void moveForwardSlow() {
+  leftMotor->setSpeed(50);
+  rightMotor->setSpeed(50);
+  leftMotor->run(BACKWARD);
+  rightMotor->run(BACKWARD);
 }
 
 void stopMotors() {
   leftMotor->run(RELEASE);
   rightMotor->run(RELEASE);
-}
-
-// New function to handle bark detection, updated to show microphone pin data
-void barkDetected() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("BARK DETECTED");
-  lcd.setCursor(0, 1);
-  // Displaying microphone pin configuration on the LCD (BCLK=9, DOUT=8, LRCL=7)
-  lcd.print("Mic: BCLK=9 DOUT=8");
-  delay(1000); // Display message for 1 second
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Distance & Angle");
 }
