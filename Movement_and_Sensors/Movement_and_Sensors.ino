@@ -19,6 +19,10 @@ const int BACKWARD_SPEED = 200; // Increased from 150
 const int ROTATION_SPEED = 160; // Increased from 100
 const int ROTATION_DELAY = 2500; // Increased from 2000ms
 
+// In this Arduino code the microphone is not read directly –
+// Instead, the Raspberry Pi detects a bark via its I2S mic and sends a command.
+// The Arduino will display distance normally. If a bark is detected, it will display that message.
+
 void setup() {
   Serial.begin(9600);
   lcd.init();
@@ -39,19 +43,22 @@ void setup() {
   leftMotor->setSpeed(0);
   rightMotor->setSpeed(0);
   
+  // Display the header message showing "Distance" only (angle removed)
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Distance & Angle");
+  lcd.print("Distance");
 }
 
 void loop() {
   float distance = measureDistance();
   
+  // Show distance on the LCD (overwriting previous content)
   lcd.setCursor(0, 0);
   lcd.print("Dist: ");
   lcd.print(distance);
   lcd.print(" cm   ");
   
+  // Check if a serial command is available from the Raspberry Pi
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
@@ -62,6 +69,8 @@ void loop() {
       rotate360();
     } else if (command == "STOP") {
       stopMotors();
+    } else if (command == "BARK") {  // When a bark is detected on the Pi
+      barkDetected();            // Execute the bark detection routine
     }
   }
   
@@ -115,4 +124,17 @@ void moveBackward() {
 void stopMotors() {
   leftMotor->run(RELEASE);
   rightMotor->run(RELEASE);
+}
+
+// New function to handle bark detection
+// When a "BARK" command is received, this function clears the LCD,
+// displays "BARK DETECTED" for 10 seconds, then resumes normal operation.
+void barkDetected() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("BARK DETECTED");
+  delay(10000); // Hold the message for 10 seconds
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Distance");
 }
