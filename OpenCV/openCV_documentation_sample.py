@@ -37,27 +37,25 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
                 objectInfo.append([box, className])
                 if draw:
                     cv2.rectangle(img, box, color=(0,255,0), thickness=2)
-                    cv2.putText(img, classNames[classId - 1].upper(), (box[0]+10, box[1]+30),
+                    cv2.putText(img, classNames[classId - 1].upper(),
+                                (box[0] + 10, box[1] + 30),
                                 cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,0), 2)
-                    cv2.putText(img, str(round(confidence*100,2)), (box[0]+200, box[1]+30),
+                    cv2.putText(img, str(round(confidence*100,2)),
+                                (box[0] + 200, box[1] + 30),
                                 cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,0), 2)
     return img, objectInfo
 
-# NEW FUNCTION FOR BARK DETECTION USING MICROPHONE AUDIO INPUT:
+# NEW FUNCTION FOR BARK DETECTION USING THE MICROPHONE ON CARD 1:
 def detect_bark():
     CHUNK = 1024
     FORMAT = pyaudio.paInt16
-    CHANNELS = 1     # Our I2S microphone outputs a mono signal
-    RATE = 44100     # Standard sampling rate for audio
-    THRESHOLD = 1000 # Amplitude threshold; adjust based on experimental data
+    CHANNELS = 1             # Our I2S mic outputs a mono signal
+    RATE = 44100             # Standard sampling rate for audio
+    THRESHOLD = 1000         # Amplitude threshold; adjust via testing
 
     p = pyaudio.PyAudio()
-    # Get default input device info (assuming your I2S mic is the default)
-    try:
-        device_info = p.get_default_input_device_info()
-        device_index = device_info["index"]
-    except Exception as e:
-        device_index = None  # Fallback to default
+    # With the device forced to card 1 via ALSA, we explicitly set the device index to 1.
+    device_index = 1
 
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
@@ -72,13 +70,13 @@ def detect_bark():
         # If any sample exceeds the threshold, send "BARK" over serial
         if np.max(np.abs(audio_data)) > THRESHOLD:
             ser.write(b"BARK\n")
-            time.sleep(1)  # Delay to prevent multiple triggers in rapid succession
+            time.sleep(1)  # Delay prevents rapid repeated triggers
     stream.stop_stream()
     stream.close()
     p.terminate()
 
 if __name__ == "__main__":
-    # Start the bark detection thread which listens to the I2S microphone
+    # Start the bark detection thread (mic is now fixed to card 1)
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
     
@@ -87,7 +85,7 @@ if __name__ == "__main__":
     cap.set(3, 640)
     cap.set(4, 480)
     
-    # Main loop for video/dog detection and sending serial commands
+    # Main loop for video/dog detection and serial commands
     last_rotation_time = time.time()
     rotation_interval = 30  # seconds
     
@@ -95,9 +93,9 @@ if __name__ == "__main__":
         success, img = cap.read()
         result, objectInfo = getObjects(img, 0.45, 0.2, objects=['dog'])
         
-        if objectInfo:  # If a dog is detected in the image...
+        if objectInfo:
             ser.write(b"FOLLOW\n")
-        else:         # If no dog detected, perform periodic rotation or stop
+        else:
             current_time = time.time()
             if current_time - last_rotation_time > rotation_interval:
                 ser.write(b"ROTATE\n")
