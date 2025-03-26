@@ -49,7 +49,7 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
 def detect_bark():
     CHUNK = 1024
     FORMAT = pyaudio.paInt16
-    CHANNELS = 1             # Our I2S mic outputs a mono signal
+    CHANNELS = 2             # Our I2S mic outputs a mono signal
     RATE = 44100             # Standard sampling rate for audio
     THRESHOLD = 1000         # Amplitude threshold; adjust via testing
 
@@ -57,12 +57,7 @@ def detect_bark():
     # With the device forced to card 1 via ALSA, we explicitly set the device index to 1.
     device_index = 1
 
-    stream = p.open(format=FORMAT,
-                    channels=CHANNELS,
-                    rate=RATE,
-                    input=True,
-                    frames_per_buffer=CHUNK,
-                    input_device_index=device_index)
+    stream = p.open(format=FORMAT,channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK, input_device_index=device_index)
     
     while True:
         data = stream.read(CHUNK, exception_on_overflow=False)
