@@ -10,7 +10,7 @@ import pyaudio
 ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
 ser.flush()
 
-# OPENCV SETUP (unchanged):
+# OPENCV SETUP:
 classNames = []
 classFile = "/home/eg1004/Desktop/Object_Detection_Files/coco.names"
 with open(classFile, "rt") as f:
@@ -36,29 +36,35 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
             if className in objects:
                 objectInfo.append([box, className])
                 if draw:
-                    cv2.rectangle(img, box, color=(0,255,0), thickness=2)
+                    cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
                     cv2.putText(img, className.upper(), (box[0] + 10, box[1] + 30),
-                                cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,0), 2)
-                    cv2.putText(img, str(round(confidence*100,2)), (box[0] + 200, box[1] + 30),
-                                cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,0), 2)
+                                cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
+                    cv2.putText(img, str(round(confidence * 100, 2)), (box[0] + 200, box[1] + 30),
+                                cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
     return img, objectInfo
 
-# NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE ON CARD 1:
+# BARK_THRESHOLD for 32-bit samples.
+# In 32-bit mode, sample values can be much larger (range ~ -2^31 to 2^31-1).
+# You may need to adjust this threshold based on your testing.
+BARK_THRESHOLD = 100000
+
+# NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE ON CARD 1 (32-bit):
 def detect_bark():
     CHUNK = 1024
-    FORMAT = pyaudio.paInt16  # Using 16-bit format for audio input
-    CHANNELS = 2            # Our I2S microphone outputs a mono signal
-    RATE = 48000            # Updated sample rate (the mic supports 48kHz)
-    THRESHOLD = 1000        # Amplitude threshold; adjust based on testing
+    FORMAT = pyaudio.paInt32    # 32-bit audio input format
+    CHANNELS = 1                # Assuming the I2S mic outputs mono audio
+    RATE = 48000                # Sample rate (48 kHz)
+    threshold = BARK_THRESHOLD  # Sensitivity threshold for 32-bit mode
 
-    # Initialize PyAudio
     p = pyaudio.PyAudio()
-    # Since the ALSA device has been forced to card 1, use that index directly.
-    device_index = 1
+    device_index = 1  # Using the fixed ALSA card 1
 
     try:
-        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK, input_device_index=device_index)
+        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE,
+                        input=True, frames_per_buffer=CHUNK,
+                        input_device_index=device_index)
     except Exception as e:
+        # If unable to open the stream, terminate PyAudio.
         print("Error opening audio stream:", e)
         p.terminate()
         return
@@ -67,30 +73,28 @@ def detect_bark():
         try:
             data = stream.read(CHUNK, exception_on_overflow=False)
         except Exception as e:
-            print("Error during read:", e)
             continue
-        audio_data = np.frombuffer(data, dtype=np.int16)
-        # If any sample exceeds the threshold, assume a bark and send a command
-        if np.max(np.abs(audio_data)) > THRESHOLD:
+        # Convert the byte data into a NumPy array using 32-bit integers.
+        audio_data = np.frombuffer(data, dtype=np.int32)
+        if np.max(np.abs(audio_data)) > threshold:
+            # If a "bark" is detected, send the "BARK" command.
             ser.write(b"BARK\n")
-            print("Bark detected!")
-            # Delay to prevent rapid re-triggering
-            time.sleep(1)
+            time.sleep(1)  # Delay to mitigate rapid re-triggering
+
     stream.stop_stream()
     stream.close()
     p.terminate()
 
 if __name__ == "__main__":
-    # Start the bark detection thread using the I2S mic (card 1)
+    # Start the bark detection thread (using 32-bit samples).
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
 
-    # Setup for OpenCV video capture
+    # Setup OpenCV video capture (for dog detection)
     cap = cv2.VideoCapture(0)
-    cap.set(3, 640)
-    cap.set(4, 480)
+    cap.set(3, 640)  # Width
+    cap.set(4, 480)  # Height
 
-    # Main loop for dog detection and sending serial commands to Arduino
     last_rotation_time = time.time()
     rotation_interval = 30  # seconds
 
@@ -98,11 +102,10 @@ if __name__ == "__main__":
         success, img = cap.read()
         if not success:
             continue
-        result, objectInfo = getObjects(img, 0.45, 0.2, objects=['dog'])
-
-        if objectInfo:  # Dog detected
+        img, objectInfo = getObjects(img, 0.45, 0.2, objects=['dog'])
+        if objectInfo:
             ser.write(b"FOLLOW\n")
-        else:  # No dog detected, send rotation or stop command
+        else:
             current_time = time.time()
             if current_time - last_rotation_time > rotation_interval:
                 ser.write(b"ROTATE\n")
