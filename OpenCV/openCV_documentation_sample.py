@@ -46,7 +46,7 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
 # BARK_THRESHOLD for 32-bit samples.
 # In 32-bit mode, sample values can be much larger (range ~ -2^31 to 2^31-1).
 # You may need to adjust this threshold based on your testing.
-BARK_THRESHOLD = 100000
+BARK_THRESHOLD = 2**31 #Set to max to prevent misfiring (change as need)
 
 # NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE ON CARD 1 (32-bit):
 def detect_bark():
