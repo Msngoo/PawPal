@@ -33,75 +33,87 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
     if len(classIds) != 0:
         for classId, confidence, box in zip(classIds.flatten(), confs.flatten(), bbox):
             className = classNames[classId - 1]
-            if className in objects: 
+            if className in objects:
                 objectInfo.append([box, className])
                 if draw:
                     cv2.rectangle(img, box, color=(0,255,0), thickness=2)
-                    cv2.putText(img, classNames[classId - 1].upper(),
-                                (box[0] + 10, box[1] + 30),
+                    cv2.putText(img, className.upper(), (box[0] + 10, box[1] + 30),
                                 cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,0), 2)
-                    cv2.putText(img, str(round(confidence*100,2)),
-                                (box[0] + 200, box[1] + 30),
+                    cv2.putText(img, str(round(confidence*100,2)), (box[0] + 200, box[1] + 30),
                                 cv2.FONT_HERSHEY_COMPLEX, 1, (0,255,0), 2)
     return img, objectInfo
 
-# NEW FUNCTION FOR BARK DETECTION USING THE MICROPHONE ON CARD 1:
+# NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE ON CARD 1:
 def detect_bark():
     CHUNK = 1024
-    FORMAT = pyaudio.paInt16
-    CHANNELS = 2             # Our I2S mic outputs a mono signal
-    RATE = 44100             # Standard sampling rate for audio
-    THRESHOLD = 1000         # Amplitude threshold; adjust via testing
+    FORMAT = pyaudio.paInt16  # Using 16-bit format for audio input
+    CHANNELS = 2            # Our I2S microphone outputs a mono signal
+    RATE = 48000            # Updated sample rate (the mic supports 48kHz)
+    THRESHOLD = 1000        # Amplitude threshold; adjust based on testing
 
+    # Initialize PyAudio
     p = pyaudio.PyAudio()
-    # With the device forced to card 1 via ALSA, we explicitly set the device index to 1.
+    # Since the ALSA device has been forced to card 1, use that index directly.
     device_index = 1
 
-    stream = p.open(format=FORMAT,channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK, input_device_index=device_index)
-    
+    try:
+        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK, input_device_index=device_index)
+    except Exception as e:
+        print("Error opening audio stream:", e)
+        p.terminate()
+        return
+
     while True:
-        data = stream.read(CHUNK, exception_on_overflow=False)
+        try:
+            data = stream.read(CHUNK, exception_on_overflow=False)
+        except Exception as e:
+            print("Error during read:", e)
+            continue
         audio_data = np.frombuffer(data, dtype=np.int16)
-        # If any sample exceeds the threshold, send "BARK" over serial
+        # If any sample exceeds the threshold, assume a bark and send a command
         if np.max(np.abs(audio_data)) > THRESHOLD:
             ser.write(b"BARK\n")
-            time.sleep(1)  # Delay prevents rapid repeated triggers
+            print("Bark detected!")
+            # Delay to prevent rapid re-triggering
+            time.sleep(1)
     stream.stop_stream()
     stream.close()
     p.terminate()
 
 if __name__ == "__main__":
-    # Start the bark detection thread (mic is now fixed to card 1)
+    # Start the bark detection thread using the I2S mic (card 1)
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
-    
+
     # Setup for OpenCV video capture
     cap = cv2.VideoCapture(0)
     cap.set(3, 640)
     cap.set(4, 480)
-    
-    # Main loop for video/dog detection and serial commands
+
+    # Main loop for dog detection and sending serial commands to Arduino
     last_rotation_time = time.time()
     rotation_interval = 30  # seconds
-    
+
     while True:
         success, img = cap.read()
+        if not success:
+            continue
         result, objectInfo = getObjects(img, 0.45, 0.2, objects=['dog'])
-        
-        if objectInfo:
+
+        if objectInfo:  # Dog detected
             ser.write(b"FOLLOW\n")
-        else:
+        else:  # No dog detected, send rotation or stop command
             current_time = time.time()
             if current_time - last_rotation_time > rotation_interval:
                 ser.write(b"ROTATE\n")
                 last_rotation_time = current_time
             else:
                 ser.write(b"STOP\n")
-        
+
         cv2.imshow("Output", img)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-    
+
     cap.release()
     cv2.destroyAllWindows()
     ser.close()
