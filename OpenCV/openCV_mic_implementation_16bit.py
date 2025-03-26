@@ -43,28 +43,26 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
                                 cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
     return img, objectInfo
 
-# BARK_THRESHOLD for 32-bit samples.
-# In 32-bit mode, sample values can be much larger (range ~ -2^31 to 2^31-1).
-# You may need to adjust this threshold based on your testing.
-BARK_THRESHOLD = 100000
+# BARK_THRESHOLD controls the sensitivity (amplitude) needed to trigger a bark.
+BARK_THRESHOLD = 1000  # For paInt16, sample values range roughly from -32768 to +32767
 
-# NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE ON CARD 1 (32-bit):
+# NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE ON CARD 1:
 def detect_bark():
     CHUNK = 1024
-    FORMAT = pyaudio.paInt32    # 32-bit audio input format
+    FORMAT = pyaudio.paInt16    # 16-bit audio input format
     CHANNELS = 1                # Assuming the I2S mic outputs mono audio
     RATE = 48000                # Sample rate (48 kHz)
-    threshold = BARK_THRESHOLD  # Sensitivity threshold for 32-bit mode
+    threshold = BARK_THRESHOLD  # Sensitivity threshold
 
     p = pyaudio.PyAudio()
-    device_index = 1  # Using the fixed ALSA card 1
+    device_index = 1  # Use the fixed ALSA card 1 from your configuration
 
     try:
         stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE,
                         input=True, frames_per_buffer=CHUNK,
                         input_device_index=device_index)
     except Exception as e:
-        # If unable to open the stream, terminate PyAudio.
+        # If unable to open the audio stream, terminate PyAudio.
         print("Error opening audio stream:", e)
         p.terminate()
         return
@@ -74,26 +72,26 @@ def detect_bark():
             data = stream.read(CHUNK, exception_on_overflow=False)
         except Exception as e:
             continue
-        # Convert the byte data into a NumPy array using 32-bit integers.
-        audio_data = np.frombuffer(data, dtype=np.int32)
+        # Convert the byte data to a NumPy array using 16-bit integers.
+        audio_data = np.frombuffer(data, dtype=np.int16)
         if np.max(np.abs(audio_data)) > threshold:
-            # If a "bark" is detected, send the "BARK" command.
+            # A bark is detected—send the "BARK" command to the Arduino.
             ser.write(b"BARK\n")
-            time.sleep(1)  # Delay to mitigate rapid re-triggering
+            time.sleep(1)  # Brief pause to prevent repeated triggers
 
     stream.stop_stream()
     stream.close()
     p.terminate()
 
 if __name__ == "__main__":
-    # Start the bark detection thread (using 32-bit samples).
+    # Start the bark detection in a separate thread.
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
 
-    # Setup OpenCV video capture (for dog detection)
+    # Setup OpenCV video capture for dog detection.
     cap = cv2.VideoCapture(0)
-    cap.set(3, 640)  # Width
-    cap.set(4, 480)  # Height
+    cap.set(3, 640)  # Set frame width
+    cap.set(4, 480)  # Set frame height
 
     last_rotation_time = time.time()
     rotation_interval = 30  # seconds
