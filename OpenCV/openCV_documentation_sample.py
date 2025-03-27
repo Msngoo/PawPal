@@ -43,57 +43,47 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
     return img, objectInfo
 
 # UPDATED BARK DETECTION CONFIGURATION
-# Changed to use 16-bit audio format with adjusted threshold for better compatibility
 def detect_bark():
     CHUNK = 1024
-    FORMAT = pyaudio.paInt16    # Changed from paInt32 to paInt16
-    CHANNELS = 1                # Kept as mono for single I2S mic
-    RATE = 48000                # Standard 48kHz sample rate
-    threshold = 15000           # Adjusted threshold for 16-bit audio
+    FORMAT = pyaudio.paInt16    # Using 16-bit audio format
+    CHANNELS = 1                # Mono configuration for single I2S mic
+    RATE = 48000                # Standard sample rate 48 kHz
+    # Threshold Explanation:
+    # 16-bit audio samples range from -32768 to 32767.
+    # Typical RMS values for a dog bark may range from about 10000 to 20000.
+    # Setting the threshold here to 15000 means that when the RMS of the audio exceeds 15000,
+    # it is considered a bark.
+    threshold = 15000           
 
     p = pyaudio.PyAudio()
-    device_index = 3            # Using device index 3 as identified by arecord -l
+    device_index = 3            # Using device index 3 (as identified by arecord -l)
 
-    # Print device information for debugging
-    print("\nAudio Device Information:")
     try:
         dev_info = p.get_device_info_by_index(device_index)
-        print(f"Selected Device: {dev_info['name']}")
-        print(f"Max Input Channels: {dev_info['maxInputChannels']}")
-        print(f"Default Sample Rate: {dev_info['defaultSampleRate']}")
-    except Exception as e:
-        print(f"Error getting device info: {e}")
+    except Exception:
+        p.terminate()
+        return
 
     try:
         stream = p.open(format=FORMAT,
-                       channels=CHANNELS,
-                       rate=RATE,
-                       input=True,
-                       frames_per_buffer=CHUNK,
-                       input_device_index=device_index)
-        
-        print("Audio stream opened successfully in mono mode")
-        
-    except Exception as e:
-        print(f"Error opening audio stream: {e}")
+                        channels=CHANNELS,
+                        rate=RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK,
+                        input_device_index=device_index)
+    except Exception:
         p.terminate()
         return
 
     while True:
         try:
             data = stream.read(CHUNK, exception_on_overflow=False)
-            audio_data = np.frombuffer(data, dtype=np.int16)  # Changed to int16
-            
-            # Using RMS value for more reliable bark detection
+            audio_data = np.frombuffer(data, dtype=np.int16)
             rms = np.sqrt(np.mean(np.square(audio_data)))
-            
             if rms > threshold:
-                print("Bark detected!")
                 ser.write(b"BARK\n")
                 time.sleep(1)  # Prevent rapid retriggering
-                
-        except Exception as e:
-            print(f"Error reading audio data: {e}")
+        except Exception:
             continue
 
     stream.stop_stream()
