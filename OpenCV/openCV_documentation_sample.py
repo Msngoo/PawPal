@@ -60,9 +60,7 @@ def detect_bark():
     device_index = 1  # Using the fixed ALSA card 1
 
     try:
-        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE,
-                        input=True, frames_per_buffer=CHUNK,
-                        input_device_index=device_index)
+        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK, input_device_index=device_index)
     except Exception as e:
         # If unable to open the stream, terminate PyAudio.
         print("Error opening audio stream:", e)
