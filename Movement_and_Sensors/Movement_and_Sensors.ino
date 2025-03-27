@@ -3,8 +3,8 @@
 #include <MPU6050.h>
 #include <Adafruit_MotorShield.h>
 
-// Initialize the LCD (I2C address 0x27, 16 columns x 2 rows)
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+// Initialize the LCD (I2C address 0x27, 16x2)
+LiquidCrystal_I2C lcd(0x27,16,2);
 MPU6050 mpu;
 
 #define TRIG_PIN 11
@@ -17,18 +17,18 @@ Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 Adafruit_DCMotor *leftMotor = AFMS.getMotor(1);
 Adafruit_DCMotor *rightMotor = AFMS.getMotor(4);
 
-// Motor speed and rotation delay settings
+// Motor speed and rotation settings.
 const int FORWARD_SPEED = 200;  
 const int BACKWARD_SPEED = 200; 
 const int ROTATION_SPEED = 160; 
 const int ROTATION_DELAY = 2500; // in milliseconds
 
-// Solenoid timing parameters
+// Solenoid timing parameters:
 unsigned long lastSolenoidTrigger = 0;
-const unsigned long SOLENOID_INTERVAL = 10000;  // Solenoid activates every 10 seconds
-const unsigned long SOLENOID_ON_DURATION = 1000;  // Solenoid remains energized for 1 second
+const unsigned long SOLENOID_INTERVAL = 10000;  // Activate every 10 seconds.
+const unsigned long SOLENOID_ON_DURATION = 1000;  // Solenoid energized for 1 second.
 
-// Global treat counter: increases every time the solenoid fires.
+// Global treat counter.
 int treatCount = 0;
 
 void setup() {
@@ -38,19 +38,17 @@ void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   
-  // Set up the solenoid control pin.
-  // Wiring: one terminal of the solenoid is tied to 5V and the other to digital pin 9.
-  // When digital pin 9 is set LOW, a 5V difference is applied across the solenoid.
+  // Set solenoid control pin as output and default to HIGH (solenoid off).
   pinMode(SOLENOID_PIN, OUTPUT);
-  digitalWrite(SOLENOID_PIN, HIGH);  // Default OFF
+  digitalWrite(SOLENOID_PIN, HIGH);
   
   Wire.begin();
   mpu.initialize();
   if (!mpu.testConnection()) {
     lcd.clear();
-    lcd.setCursor(0, 0);
+    lcd.setCursor(0,0);
     lcd.print("MPU6050 Error!");
-    while (1);
+    while(1);
   }
   
   AFMS.begin();
@@ -59,24 +57,22 @@ void setup() {
 }
 
 void loop() {
-  // Get the measured distance
   float distance = measureDistance();
   
-  // Update LCD every loop iteration:
+  // Update LCD: first line displays distance, second line shows treat count.
   lcd.clear();
-  lcd.setCursor(0, 0);
+  lcd.setCursor(0,0);
   lcd.print("Dist: ");
   lcd.print(distance);
   lcd.print(" cm");
-  lcd.setCursor(0, 1);
+  lcd.setCursor(0,1);
   lcd.print("Treats: ");
   lcd.print(treatCount);
   
-  // Process serial commands from the Raspberry Pi.
+  // Process incoming serial commands from the Raspberry Pi.
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-    
     if (command == "FOLLOW") {
       followDog(distance);
     } else if (command == "ROTATE") {
@@ -91,15 +87,13 @@ void loop() {
   // Check if it's time to fire the solenoid.
   unsigned long currentMillis = millis();
   if (currentMillis - lastSolenoidTrigger >= SOLENOID_INTERVAL) {
-    // Activate the solenoid (active-low): set SOLENOID_PIN LOW.
-    digitalWrite(SOLENOID_PIN, LOW);
-    delay(SOLENOID_ON_DURATION);  // Keep solenoid energized for 1 second.
-    digitalWrite(SOLENOID_PIN, HIGH);  // Turn the solenoid off.
+    digitalWrite(SOLENOID_PIN, LOW);  // Activate solenoid (active-low).
+    delay(SOLENOID_ON_DURATION);       // Energize for 1 second.
+    digitalWrite(SOLENOID_PIN, HIGH);   // Turn solenoid off.
     
     // Increment the treat counter.
     treatCount++;
     
-    // Update last solenoid trigger time.
     lastSolenoidTrigger = currentMillis;
   }
   
@@ -155,18 +149,17 @@ void stopMotors() {
   rightMotor->run(RELEASE);
 }
 
-// Displays "BARK DETECTED" for 10 seconds, then reverts to showing distance and treat count.
 void barkDetected() {
   lcd.clear();
-  lcd.setCursor(0, 0);
+  lcd.setCursor(0,0);
   lcd.print("BARK DETECTED");
   delay(10000);
   lcd.clear();
-  lcd.setCursor(0, 0);
+  lcd.setCursor(0,0);
   lcd.print("Dist: ");
   lcd.print(measureDistance());
   lcd.print(" cm");
-  lcd.setCursor(0, 1);
+  lcd.setCursor(0,1);
   lcd.print("Treats: ");
   lcd.print(treatCount);
 }

@@ -1,0 +1,35 @@
+------------------------------
+Revert Forced Card Configuration – Instructions and Explanation
+
+Steps Taken to Force the Card:
+--------------------------------
+• To force your I2S microphone to load as a fixed card, you (or a previous configuration) edited the ALSA configuration file:
+    /etc/modprobe.d/alsa-base.conf
+• In that file, a line similar to the following was added:
+    options snd_rpi_googlevoicehat_soundcard index=1
+• This command tells the Linux kernel that every time it loads the "snd_rpi_googlevoicehat_soundcard" driver, it should be assigned as card 1.
+
+Steps to Revert the Forced Card Configuration:
+-----------------------------------------------
+1. Open a terminal on your Raspberry Pi.
+2. Edit the ALSA configuration file by running:
+       sudo nano /etc/modprobe.d/alsa-base.conf
+3. Look for the line:
+       options snd_rpi_googlevoicehat_soundcard index=1
+4. Delete this line or comment it out by placing a '#' at the front.
+5. Save the file (press Ctrl+O, then Enter) and exit (Ctrl+X).
+6. Reboot the Pi by running:
+       sudo reboot
+7. After rebooting, verify the card assignment by running:
+       arecord -l
+   The microphone should now appear with its natural card index (for example, card 3).
+
+Arecord Testing Step:
+----------------------
+Before testing, you ran:
+    arecord -D plughw:3 -c2 -r 48000 -f S32_LE -t wav -V mono -v file.wav
+• This command forces ALSA to record from card 3 using 2 channels at 48 kHz with 32-bit samples.
+• It is useful to check that the microphone and ALSA are working correctly.
+• Once the forced configuration is reverted, you should adjust your Python code’s device index (if needed) to match the natural assignment.
+
+------------------------------

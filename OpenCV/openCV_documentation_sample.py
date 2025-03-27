@@ -44,25 +44,30 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
     return img, objectInfo
 
 # BARK_THRESHOLD for 32-bit samples.
-# In 32-bit mode, sample values can be much larger (range ~ -2^31 to 2^31-1).
-# You may need to adjust this threshold based on your testing.
-BARK_THRESHOLD = 2**31 #Set to max to prevent misfiring (change as need)
+# In 32-bit mode, sample values can be in the range of approximately -2^31 to 2^31-1.
+# The threshold below is set high to avoid misfiring; adjust as needed.
+BARK_THRESHOLD = 2**31
 
-# NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE ON CARD 1 (32-bit):
+# NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE (32-bit, Mono)
 def detect_bark():
     CHUNK = 1024
-    FORMAT = pyaudio.paInt32    # 32-bit audio input format
-    CHANNELS = 1                # Assuming the I2S mic outputs mono audio
+    FORMAT = pyaudio.paInt32    # 32-bit audio input format.
+    CHANNELS = 1                # Use 1 channel (mono), since the I2S mic outputs mono audio.
     RATE = 48000                # Sample rate (48 kHz)
-    threshold = BARK_THRESHOLD  # Sensitivity threshold for 32-bit mode
+    threshold = BARK_THRESHOLD  # Sensitivity threshold for 32-bit mode.
 
     p = pyaudio.PyAudio()
-    device_index = 1  # Using the fixed ALSA card 1
+    # After reverting the forced card settings, the natural card assignment shows the mic as card 3.
+    device_index = 3
 
     try:
-        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK, input_device_index=device_index)
+        stream = p.open(format=FORMAT,
+                        channels=CHANNELS,
+                        rate=RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK,
+                        input_device_index=device_index)
     except Exception as e:
-        # If unable to open the stream, terminate PyAudio.
         print("Error opening audio stream:", e)
         p.terminate()
         return
@@ -72,29 +77,28 @@ def detect_bark():
             data = stream.read(CHUNK, exception_on_overflow=False)
         except Exception as e:
             continue
-        # Convert the byte data into a NumPy array using 32-bit integers.
+        # Convert byte data into a NumPy array with 32-bit integers.
         audio_data = np.frombuffer(data, dtype=np.int32)
         if np.max(np.abs(audio_data)) > threshold:
-            # If a "bark" is detected, send the "BARK" command.
             ser.write(b"BARK\n")
-            time.sleep(1)  # Delay to mitigate rapid re-triggering
+            time.sleep(1)  # Prevent rapid re-triggering.
 
     stream.stop_stream()
     stream.close()
     p.terminate()
 
 if __name__ == "__main__":
-    # Start the bark detection thread (using 32-bit samples).
+    # Start the bark detection thread.
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
 
-    # Setup OpenCV video capture (for dog detection)
+    # Setup OpenCV video capture for dog detection.
     cap = cv2.VideoCapture(0)
-    cap.set(3, 640)  # Width
-    cap.set(4, 480)  # Height
+    cap.set(3, 640)  # Set frame width.
+    cap.set(4, 480)  # Set frame height.
 
     last_rotation_time = time.time()
-    rotation_interval = 30  # seconds
+    rotation_interval = 30  # seconds.
 
     while True:
         success, img = cap.read()
