@@ -6,7 +6,6 @@ import numpy as np
 import pyaudio
 
 # SERIAL COMMUNICATION SETUP:
-# The Raspberry Pi communicates with the Arduino via the USB serial port.
 ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
 ser.flush()
 
@@ -43,67 +42,82 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
                                 cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
     return img, objectInfo
 
-# BARK_THRESHOLD for 32-bit samples.
-# In 32-bit mode, sample values can be in the range of approximately -2^31 to 2^31-1.
-# The threshold below is set high to avoid misfiring; adjust as needed.
-BARK_THRESHOLD = 2**31
-
-# NEW FUNCTION FOR BARK DETECTION USING THE I2S MICROPHONE (32-bit, Mono)
+# UPDATED BARK DETECTION CONFIGURATION
+# Changed to use 16-bit audio format with adjusted threshold for better compatibility
 def detect_bark():
     CHUNK = 1024
-    FORMAT = pyaudio.paInt32    # 32-bit audio input format.
-    CHANNELS = 1                # Use 1 channel (mono), since the I2S mic outputs mono audio.
-    RATE = 48000                # Sample rate (48 kHz)
-    threshold = BARK_THRESHOLD  # Sensitivity threshold for 32-bit mode.
+    FORMAT = pyaudio.paInt16    # Changed from paInt32 to paInt16
+    CHANNELS = 1                # Kept as mono for single I2S mic
+    RATE = 48000                # Standard 48kHz sample rate
+    threshold = 15000           # Adjusted threshold for 16-bit audio
 
     p = pyaudio.PyAudio()
-    # After reverting the forced card settings, the natural card assignment shows the mic as card 3.
-    device_index = 3
+    device_index = 3            # Using device index 3 as identified by arecord -l
+
+    # Print device information for debugging
+    print("\nAudio Device Information:")
+    try:
+        dev_info = p.get_device_info_by_index(device_index)
+        print(f"Selected Device: {dev_info['name']}")
+        print(f"Max Input Channels: {dev_info['maxInputChannels']}")
+        print(f"Default Sample Rate: {dev_info['defaultSampleRate']}")
+    except Exception as e:
+        print(f"Error getting device info: {e}")
 
     try:
         stream = p.open(format=FORMAT,
-                        channels=CHANNELS,
-                        rate=RATE,
-                        input=True,
-                        frames_per_buffer=CHUNK,
-                        input_device_index=device_index)
+                       channels=CHANNELS,
+                       rate=RATE,
+                       input=True,
+                       frames_per_buffer=CHUNK,
+                       input_device_index=device_index)
+        
+        print("Audio stream opened successfully in mono mode")
+        
     except Exception as e:
-        print("Error opening audio stream:", e)
+        print(f"Error opening audio stream: {e}")
         p.terminate()
         return
 
     while True:
         try:
             data = stream.read(CHUNK, exception_on_overflow=False)
+            audio_data = np.frombuffer(data, dtype=np.int16)  # Changed to int16
+            
+            # Using RMS value for more reliable bark detection
+            rms = np.sqrt(np.mean(np.square(audio_data)))
+            
+            if rms > threshold:
+                print("Bark detected!")
+                ser.write(b"BARK\n")
+                time.sleep(1)  # Prevent rapid retriggering
+                
         except Exception as e:
+            print(f"Error reading audio data: {e}")
             continue
-        # Convert byte data into a NumPy array with 32-bit integers.
-        audio_data = np.frombuffer(data, dtype=np.int32)
-        if np.max(np.abs(audio_data)) > threshold:
-            ser.write(b"BARK\n")
-            time.sleep(1)  # Prevent rapid re-triggering.
 
     stream.stop_stream()
     stream.close()
     p.terminate()
 
 if __name__ == "__main__":
-    # Start the bark detection thread.
+    # Start bark detection thread
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
 
-    # Setup OpenCV video capture for dog detection.
+    # Setup video capture
     cap = cv2.VideoCapture(0)
-    cap.set(3, 640)  # Set frame width.
-    cap.set(4, 480)  # Set frame height.
+    cap.set(3, 640)
+    cap.set(4, 480)
 
     last_rotation_time = time.time()
-    rotation_interval = 30  # seconds.
+    rotation_interval = 30  # seconds
 
     while True:
         success, img = cap.read()
         if not success:
             continue
+            
         img, objectInfo = getObjects(img, 0.45, 0.2, objects=['dog'])
         if objectInfo:
             ser.write(b"FOLLOW\n")
