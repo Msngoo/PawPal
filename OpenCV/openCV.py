@@ -20,12 +20,14 @@ ser.flush()
 
 # OPENCV SETUP:
 classNames = []
-classFile = "/home/eg1004/Desktop/Object_Detection_Files/coco.names"
+# Updated file path: Now inside PawPal folder on Desktop
+classFile = "/home/eg1004/Desktop/PawPal/Object_Detection_Files/coco.names"
 with open(classFile, "rt") as f:
     classNames = f.read().rstrip("\n").split("\n")
 
-configPath = "/home/eg1004/Desktop/Object_Detection_Files/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
-weightsPath = "/home/eg1004/Desktop/Object_Detection_Files/frozen_inference_graph.pb"
+# Updated configuration and weights paths
+configPath = "/home/eg1004/Desktop/PawPal/Object_Detection_Files/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
+weightsPath = "/home/eg1004/Desktop/PawPal/Object_Detection_Files/frozen_inference_graph.pb"
 
 net = cv2.dnn_DetectionModel(weightsPath, configPath)
 net.setInputSize(320, 320)
