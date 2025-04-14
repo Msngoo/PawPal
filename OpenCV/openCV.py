@@ -1,24 +1,22 @@
+# Working as of 7:10 pm, Apr 14, 2025
+
 import cv2
 import serial
 import time
 import threading
 import numpy as np
 import pyaudio
+import RPi.GPIO as GPIO
 
-# Function to initialize the serial connection with retries.
-def init_serial(port='/dev/ttyACM0', baudrate=9600, timeout=1):
-    while True:
-        try:
-            ser = serial.Serial(port, baudrate, timeout=timeout)
-            ser.flush()
-            return ser
-        except Exception as e:
-            print("Error initializing serial connection:", e)
-            print("Retrying in 2 seconds...")
-            time.sleep(2)
+# Setup GPIO to control the solenoid (active-low)
+GPIO.setmode(GPIO.BCM)
+SOLENOID_PIN = 17            # Use BCM pin 17 (physical pin 11 on the Pi)
+GPIO.setup(SOLENOID_PIN, GPIO.OUT)
+GPIO.output(SOLENOID_PIN, GPIO.HIGH)  # Default off (HIGH = off)
 
 # SERIAL COMMUNICATION SETUP:
-ser = init_serial()
+ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+ser.flush()
 
 # OPENCV SETUP:
 classNames = []
@@ -57,17 +55,17 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
 def detect_bark():
     CHUNK = 1024
     FORMAT = pyaudio.paInt16    # Using 16-bit audio format
-    CHANNELS = 1                # Mono configuration for a single I2S mic
-    RATE = 48000                # Standard sample rate (48 kHz)
+    CHANNELS = 1                # Mono configuration for single I2S mic
+    RATE = 48000                # Standard 48kHz sample rate
     # Threshold Explanation:
-    #  - 16-bit audio samples range from -32768 to 32767.
-    #  - Typical RMS values for a dog bark may range from about 10000 to 20000.
-    #  - Setting the threshold to 15000 means that when the computed RMS exceeds 15000,
-    #    the sound is considered a bark.
+    # 16-bit audio samples range from -32768 to 32767.
+    # Typical RMS values for a dog bark may range from about 10000 to 20000.
+    # Setting the threshold to 15000 means that when the RMS exceeds 15000,
+    # the sound is considered a bark.
     threshold = 15000           
 
     p = pyaudio.PyAudio()
-    device_index = 2            # Changed from 3 to 2 so that the Pi uses device index 2
+    device_index = 2            # Changed from 3 to 2 per instructions
 
     try:
         stream = p.open(format=FORMAT,
@@ -76,7 +74,7 @@ def detect_bark():
                         input=True,
                         frames_per_buffer=CHUNK,
                         input_device_index=device_index)
-    except Exception as e:
+    except Exception:
         p.terminate()
         return
 
@@ -95,12 +93,29 @@ def detect_bark():
     stream.close()
     p.terminate()
 
+# Solenoid control: fire the solenoid every 10 seconds via the Pi's GPIO,
+# then send a "TREAT" command to the Arduino so it can update the treat counter.
+def solenoid_control():
+    treat_interval = 10  # seconds
+    while True:
+        time.sleep(treat_interval)
+        # Activate the solenoid: set GPIO low for 1 second (active-low)
+        GPIO.output(SOLENOID_PIN, GPIO.LOW)
+        time.sleep(1)
+        GPIO.output(SOLENOID_PIN, GPIO.HIGH)
+        # Notify the Arduino to update the treat counter
+        ser.write(b"TREAT\n")
+
 if __name__ == "__main__":
     # Start bark detection thread
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
 
-    # Setup video capture
+    # Start solenoid control thread
+    solenoid_thread = threading.Thread(target=solenoid_control, daemon=True)
+    solenoid_thread.start()
+
+    # Setup video capture for object detection
     cap = cv2.VideoCapture(0)
     cap.set(3, 640)
     cap.set(4, 480)
@@ -112,7 +127,6 @@ if __name__ == "__main__":
         success, img = cap.read()
         if not success:
             continue
-
         img, objectInfo = getObjects(img, 0.45, 0.2, objects=['dog'])
         if objectInfo:
             ser.write(b"FOLLOW\n")
@@ -123,7 +137,6 @@ if __name__ == "__main__":
                 last_rotation_time = current_time
             else:
                 ser.write(b"STOP\n")
-
         cv2.imshow("Output", img)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
