@@ -1,4 +1,11 @@
-# Working as of 7:10 pm, Apr 14, 2025
+'''
+Blynk integration using a Button widget template:
+    V0: Switch control
+    V1: Switch value
+    V2: Seconds (treat timer)
+    V3: Button image
+Live video streaming using Flask
+'''
 
 import cv2
 import serial
@@ -7,25 +14,26 @@ import threading
 import numpy as np
 import pyaudio
 import RPi.GPIO as GPIO
+import BlynkLib
+from flask import Flask, Response
 
-# Setup GPIO to control the solenoid (active-low)
+
+# Hardware and Serial Setup
 GPIO.setmode(GPIO.BCM)
-SOLENOID_PIN = 17            # Use BCM pin 17 (physical pin 11 on the Pi)
+SOLENOID_PIN = 17  # BCM pin 17
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
-GPIO.output(SOLENOID_PIN, GPIO.HIGH)  # Default off (HIGH = off)
+GPIO.output(SOLENOID_PIN, GPIO.HIGH)
 
-# SERIAL COMMUNICATION SETUP:
 ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
 ser.flush()
 
-# OPENCV SETUP:
+
+# Object Detection Setup
 classNames = []
-# Updated file path: Now inside PawPal folder on Desktop
 classFile = "/home/eg1004/Desktop/PawPal/Object_Detection_Files/coco.names"
 with open(classFile, "rt") as f:
     classNames = f.read().rstrip("\n").split("\n")
 
-# Updated configuration and weights paths
 configPath = "/home/eg1004/Desktop/PawPal/Object_Detection_Files/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt"
 weightsPath = "/home/eg1004/Desktop/PawPal/Object_Detection_Files/frozen_inference_graph.pb"
 
@@ -53,21 +61,17 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
                                 cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
     return img, objectInfo
 
-# UPDATED BARK DETECTION CONFIGURATION
+
+# Bark Detection Setup (Audio)
 def detect_bark():
     CHUNK = 1024
-    FORMAT = pyaudio.paInt16    # Using 16-bit audio format
-    CHANNELS = 1                # Mono configuration for single I2S mic
-    RATE = 48000                # Standard 48kHz sample rate
-    # Threshold Explanation:
-    # 16-bit audio samples range from -32768 to 32767.
-    # Typical RMS values for a dog bark may range from about 10000 to 20000.
-    # Setting the threshold to 15000 means that when the RMS exceeds 15000,
-    # the sound is considered a bark.
-    threshold = 15000           
-
+    FORMAT = pyaudio.paInt16
+    CHANNELS = 1
+    RATE = 48000
+    threshold = 15000
+    
     p = pyaudio.PyAudio()
-    device_index = 2            # Changed from 3 to 2 per instructions
+    device_index = 2
 
     try:
         stream = p.open(format=FORMAT,
@@ -87,7 +91,7 @@ def detect_bark():
             rms = np.sqrt(np.mean(np.square(audio_data)))
             if rms > threshold:
                 ser.write(b"BARK\n")
-                time.sleep(1)  # Prevent rapid retriggering
+                time.sleep(1)
         except Exception:
             continue
 
@@ -95,35 +99,125 @@ def detect_bark():
     stream.close()
     p.terminate()
 
-# Solenoid control: fire the solenoid every 10 seconds via the Pi's GPIO,
-# then send a "TREAT" command to the Arduino so it can update the treat counter.
+
+# Solenoid Control (Treat Dispensing)
 def solenoid_control():
-    treat_interval = 10  # seconds
+    treat_interval = 10
     while True:
         time.sleep(treat_interval)
-        # Activate the solenoid: set GPIO low for 1 second (active-low)
         GPIO.output(SOLENOID_PIN, GPIO.LOW)
         time.sleep(1)
         GPIO.output(SOLENOID_PIN, GPIO.HIGH)
-        # Notify the Arduino to update the treat counter
         ser.write(b"TREAT\n")
+        device_config['last_treat_dispensed'] = time.strftime("%Y-%m-%d %H:%M:%S")
 
+
+# Blynk Integration Setup
+BLYNK_AUTH = "h5u5Jzov-zcEvMCYGTVdzjE8EBx_0-2O"  
+blynk = BlynkLib.Blynk(BLYNK_AUTH)
+
+device_config = {
+    'treat_interval': 10,
+    'switch_value': 0,
+    'last_treat_dispensed': "Never"
+}
+
+@blynk.handle_event('write V0')
+def handle_switch_control(pin, value):
+    print("Switch control (V0) command:", value)
+
+@blynk.handle_event('write V1')
+def handle_switch_value(pin, value):
+    try:
+        device_config['switch_value'] = int(value[0])
+        print("Switch value (V1) updated to:", device_config['switch_value'])
+        ser.write(f"SW:{device_config['switch_value']}\n".encode())
+    except Exception as e:
+        print("Error updating switch value:", e)
+
+@blynk.handle_event('write V2')
+def handle_seconds(pin, value):
+    try:
+        new_seconds = int(value[0])
+        device_config['treat_interval'] = new_seconds
+        print("Treat timer (V2) updated to:", new_seconds, "seconds")
+        ser.write(f"TIMER:{new_seconds}\n".encode())
+    except Exception as e:
+        print("Error updating treat timer seconds:", e)
+
+@blynk.handle_event('write V3')
+def handle_button_image(pin, value):
+    print("Button image state (V3) received:", value)
+
+def update_last_treat():
+    while True:
+        blynk.virtual_write(3, "Last treat: " + device_config['last_treat_dispensed'])
+        time.sleep(5)
+
+def update_switch_value():
+    while True:
+        blynk.virtual_write(1, device_config['switch_value'])
+        time.sleep(5)
+
+def run_blynk():
+    while True:
+        blynk.run()
+
+
+# Flask-based Live Video Streaming Setup
+app = Flask(__name__)
+cap_flask = cv2.VideoCapture(0)
+cap_flask.set(3, 640)
+cap_flask.set(4, 480)
+
+def generate_frames():
+    while True:
+        success, frame = cap_flask.read()
+        if not success:
+            break
+        else:
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+def run_flask():
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+
+
+# Main Application
 if __name__ == "__main__":
-    # Start bark detection thread
+    # Start Blynk thread
+    blynk_thread = threading.Thread(target=run_blynk, daemon=True)
+    blynk_thread.start()
+
+    # Start threads to update Blynk data streams
+    last_treat_thread = threading.Thread(target=update_last_treat, daemon=True)
+    last_treat_thread.start()
+    switch_value_thread = threading.Thread(target=update_switch_value, daemon=True)
+    switch_value_thread.start()
+
+    # Start bark detection and solenoid control threads
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
-
-    # Start solenoid control thread
     solenoid_thread = threading.Thread(target=solenoid_control, daemon=True)
     solenoid_thread.start()
 
-    # Setup video capture for object detection
+    # Start Flask thread for live video streaming
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    # Set up video capture for object detection in the main loop
     cap = cv2.VideoCapture(0)
     cap.set(3, 640)
     cap.set(4, 480)
-
+    
     last_rotation_time = time.time()
-    rotation_interval = 30  # seconds
+    rotation_interval = 30
 
     while True:
         success, img = cap.read()
