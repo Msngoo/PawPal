@@ -1,9 +1,10 @@
 '''
-Flask-based live video streaming for a Smart Pet Device:
-- Object detection using USB camera (OpenCV DNN)
-- Bark detection using PyAudio
-- Solenoid control via Raspberry Pi GPIO and serial communication to Arduino
-- Live video streaming using Flask
+Flask-based live video streaming and device control for a Smart Pet Device:
+Extra Credit App Features:
+  - Displays the last treat dispensed and current distance from the dog
+  - Provides two buttons to set the treat dispensing timer to 15 or 30 seconds
+  - Streams live video from the Raspberry Pi's USB camera
+  - Integrates object detection, bark detection, solenoid control, and serial communication to an Arduino
 '''
 
 import cv2
@@ -13,21 +14,21 @@ import threading
 import numpy as np
 import pyaudio
 import RPi.GPIO as GPIO
-from flask import Flask, Response
+from flask import Flask, Response, request
 
 #############################################
 # Hardware and Serial Setup
 #############################################
 GPIO.setmode(GPIO.BCM)
-SOLENOID_PIN = 17  # Use BCM pin 17
+SOLENOID_PIN = 17  # Use BCM pin 17 for solenoid control
 GPIO.setup(SOLENOID_PIN, GPIO.OUT)
-GPIO.output(SOLENOID_PIN, GPIO.HIGH)  # Default off (HIGH = off)
+GPIO.output(SOLENOID_PIN, GPIO.HIGH)  # Default state: off (active-low)
 
 ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
 ser.flush()
 
 #############################################
-# Object Detection Setup (OpenCV DNN)
+# Object Detection Setup (using OpenCV DNN)
 #############################################
 classNames = []
 classFile = "/home/eg1004/Desktop/PawPal/Object_Detection_Files/coco.names"
@@ -62,15 +63,25 @@ def getObjects(img, thres, nms, draw=True, objects=[]):
     return img, objectInfo
 
 #############################################
-# Bark Detection Setup (Audio)
+# Global Device Configuration
+#############################################
+# This dictionary holds parameters that the web app can update.
+device_config = {
+    'treat_interval': 10,       # Default treat dispensing timer (in seconds)
+    'last_treat_dispensed': "Never",
+    'current_distance': "N/A"
+}
+
+#############################################
+# Bark Detection Setup (Using PyAudio)
 #############################################
 def detect_bark():
     CHUNK = 1024
-    FORMAT = pyaudio.paInt16    # Using 16-bit audio format
-    CHANNELS = 1                # Mono configuration
-    RATE = 48000                # 48kHz sample rate
-    threshold = 15000           # Bark detection threshold
-    
+    FORMAT = pyaudio.paInt16  # 16-bit audio format
+    CHANNELS = 1              # Mono channel
+    RATE = 48000              # 48kHz sample rate
+    threshold = 15000         # RMS threshold for bark detection
+
     p = pyaudio.PyAudio()
     device_index = 2
 
@@ -104,19 +115,21 @@ def detect_bark():
 # Solenoid Control (Treat Dispensing)
 #############################################
 def solenoid_control():
-    # This interval (in seconds) is adjustable via the code (or by other means)
-    interval = 10  
     while True:
-        time.sleep(interval)
-        GPIO.output(SOLENOID_PIN, GPIO.LOW)
+        # Use the current treat_interval from device_config
+        time.sleep(device_config['treat_interval'])
+        GPIO.output(SOLENOID_PIN, GPIO.LOW)  # Activate solenoid (active-low)
         time.sleep(1)
-        GPIO.output(SOLENOID_PIN, GPIO.HIGH)
+        GPIO.output(SOLENOID_PIN, GPIO.HIGH) # Deactivate solenoid
         ser.write(b"TREAT\n")
+        device_config['last_treat_dispensed'] = time.strftime("%Y-%m-%d %H:%M:%S")
 
 #############################################
-# Flask-based Live Video Streaming Setup
+# Flask App Setup for Live Video Streaming and Control
 #############################################
 app = Flask(__name__)
+
+# A separate video capture dedicated for Flask streaming
 cap_flask = cv2.VideoCapture(0)
 cap_flask.set(3, 640)
 cap_flask.set(4, 480)
@@ -134,21 +147,59 @@ def generate_frames():
 
 @app.route('/video_feed')
 def video_feed():
-    # Returns the live video stream in multipart format.
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+# The main web page for control and display
+@app.route('/')
+def index():
+    html = '''
+    <!doctype html>
+    <html>
+    <head>
+        <title>Smart Pet Device Control</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body>
+        <h1>Smart Pet Device Control</h1>
+        <p>Last treat dispensed: {last_treat}</p>
+        <p>Current Distance: {current_distance}</p>
+        <button onclick="setTimer(15)">Set Timer to 15 Seconds</button>
+        <button onclick="setTimer(30)">Set Timer to 30 Seconds</button>
+        <h2>Live Video Feed</h2>
+        <img src="/video_feed" width="640" height="480">
+        <script>
+            function setTimer(value){
+                fetch('/set_timer?value=' + value)
+                .then(response => response.text())
+                .then(data => { alert(data); window.location.reload(); });
+            }
+        </script>
+    </body>
+    </html>
+    '''.format(last_treat=device_config['last_treat_dispensed'],
+               current_distance=device_config['current_distance'])
+    return html
+
+# Endpoint to update the treat timer using query parameters
+@app.route('/set_timer')
+def set_timer():
+    value = request.args.get('value', default=10, type=int)
+    device_config['treat_interval'] = value
+    return "Timer set to {} seconds.".format(value)
 
 def run_flask():
     app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
 #############################################
-# Main Application Loop
+# Main Application Loop (Device Functions)
 #############################################
 if __name__ == "__main__":
-    # Start the Flask thread for live video streaming
+    # Start the Flask server in a separate thread (for the app interface and live video)
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # Start bark detection and solenoid control threads
+    # Start bark detection and solenoid control in their own threads
     bark_thread = threading.Thread(target=detect_bark, daemon=True)
     bark_thread.start()
     solenoid_thread = threading.Thread(target=solenoid_control, daemon=True)
@@ -167,10 +218,16 @@ if __name__ == "__main__":
         if not success:
             continue
 
+        # Object detection: Look for a dog in the frame.
         img, objectInfo = getObjects(img, 0.45, 0.2, objects=['dog'])
         if objectInfo:
+            # Simulate current distance (for demonstration purposes)
+            box, _ = objectInfo[0]
+            # For example, use the width of the bounding box to simulate distance:
+            device_config['current_distance'] = str(max(0, 100 - box[2]))
             ser.write(b"FOLLOW\n")
         else:
+            device_config['current_distance'] = "N/A"
             current_time = time.time()
             if current_time - last_rotation_time > rotation_interval:
                 ser.write(b"ROTATE\n")
