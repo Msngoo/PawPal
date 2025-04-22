@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Pet Device Control</title>
+  <!-- Link to manifest for PWA support (if desired) -->
+  <link rel="manifest" href="manifest.json">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      padding: 0;
+      background-color: #f2f2f2;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+    .status {
+      text-align: center;
+      margin-bottom: 20px;
+      background: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .buttons {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      margin: 0 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background-color: #4285f4;
+      color: white;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #357ae8;
+    }
+    .video-container {
+      text-align: center;
+    }
+    img {
+      max-width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Smart Pet Device Control</h1>
+  
+  <!-- Display device status -->
+  <div class="status">
+    <p id="lastTreat">Last treat dispensed: Never</p>
+    <p id="currentDistance">Current Distance: N/A</p>
+  </div>
+  
+  <!-- Timer control buttons -->
+  <div class="buttons">
+    <button onclick="setTimer(15)">Set Timer to 15 Seconds</button>
+    <button onclick="setTimer(30)">Set Timer to 30 Seconds</button>
+  </div>
+  
+  <!-- Live video stream -->
+  <div class="video-container">
+    <h2>Live Video Feed</h2>
+    <img src="http://<your_pi_ip>:5000/video_feed" alt="Live Video Feed">
+  </div>
+  
+  <script>
+    // Function to update the treat timer via a GET request to the Flask backend.
+    function setTimer(value) {
+      fetch('/set_timer?value=' + value)
+        .then(response => response.text())
+        .then(data => {
+          alert(data);
+          location.reload();
+        })
+        .catch(err => {
+          console.error('Error setting timer:', err);
+        });
+    }
+    // Optionally, you can add code here to register a service worker for PWA functionality.
+    // Example for service worker registration:
+    /*
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/static/sw.js')
+        .then(registration => {
+          console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        })
+        .catch(error => {
+          console.log('ServiceWorker registration failed: ', error);
+        });
+    }
+    */
+  </script>
+</body>
+</html>
