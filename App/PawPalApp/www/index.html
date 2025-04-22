@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PawPal Device Control</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f2f2f2; }
+    h1, h2 { text-align: center; color: #333; }
+    .status { text-align: center; margin-bottom: 20px; padding: 10px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .buttons { text-align: center; margin-bottom: 20px; }
+    button { padding: 12px 24px; font-size: 16px; margin: 0 10px; border: none; border-radius: 4px; cursor: pointer; background-color: #4285f4; color: #fff; transition: background-color 0.3s; }
+    button:hover { background-color: #357ae8; }
+    .video-container { text-align: center; }
+    img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>PawPal Device Control</h1>
+  <div class="status">
+    <p id="lastTreat">Last treat dispensed: Never</p>
+    <p id="currentDistance">Current Distance: N/A</p>
+  </div>
+  <div class="buttons">
+    <button onclick="setTimer(15)">Set Timer to 15 Seconds</button>
+    <button onclick="setTimer(30)">Set Timer to 30 Seconds</button>
+  </div>
+  <div class="video-container">
+    <h2>Live Video Feed</h2>
+    <img src="http://<your_pi_ip>:5000/video_feed" alt="Live Video Feed">
+  </div>
+  <script>
+    function setTimer(value) {
+      fetch('/set_timer?value=' + value)
+        .then(response => response.text())
+        .then(data => { alert(data); location.reload(); })
+        .catch(err => { console.error('Error:', err); });
+    }
+    // Optionally, register a service worker here for Progressive Web App capabilities.
+  </script>
+</body>
+</html>
